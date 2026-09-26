@@ -12,6 +12,7 @@ use Componenta\Auth\ContextInterface;
 use Componenta\Auth\Denied\InvalidCredentials;
 use Componenta\Auth\DeniedReasonInterface;
 use Componenta\Auth\Http\CredentialTransportState;
+use Componenta\Auth\Http\Extractor\ChainedPayloadExtractor;
 use Componenta\Auth\Http\PayloadExtractorInterface;
 use Componenta\Auth\Http\PayloadStorageInterface;
 use Componenta\Identity\IdentityInterface;
@@ -43,9 +44,9 @@ final readonly class AuthenticationMiddleware implements MiddlewareInterface
             return $handler->handle($request);
         }
 
-        $payload = $this->extractor->extract($request);
+        $payloads = $this->payloads($request);
 
-        if ($payload === null) {
+        if ($payloads === []) {
             return $handler->handle($request);
         }
 
@@ -71,18 +72,43 @@ final readonly class AuthenticationMiddleware implements MiddlewareInterface
             $transportState,
         );
 
-        try {
-            $result = $this->authenticator->attempt($payload, new Context([
-                ServerRequestInterface::class => $request,
-                ContextInterface::EXTRACTOR => $this->extractor,
-                CredentialTransportState::class => $transportState,
-            ]));
-        } catch (\Throwable $exception) {
-            if ($ownsTransportState) {
-                $transportState->discardQueued();
+        $result = null;
+
+        foreach ($payloads as $payload) {
+            try {
+                $candidate = $this->authenticator->attempt(
+                    $payload,
+                    new Context([
+                        ServerRequestInterface::class => $request,
+                        ContextInterface::EXTRACTOR => $this->extractor,
+                        CredentialTransportState::class => $transportState,
+                    ]),
+                );
+            } catch (\Throwable $exception) {
+                if ($ownsTransportState) {
+                    $transportState->discardQueued();
+                }
+
+                throw $exception;
             }
 
-            throw $exception;
+            $result = $candidate;
+
+            if ($candidate->subject instanceof IdentityInterface) {
+                break;
+            }
+
+            if (!$candidate->continueOnFailure) {
+                break;
+            }
+
+            // A soft-failed credential candidate must not leave tentative
+            // publication/compensation state behind before trying the next.
+            $transportState->discardQueued();
+        }
+
+        if (!$result instanceof AuthenticationResult) {
+            return $handler->handle($request);
         }
 
         if (
@@ -165,5 +191,19 @@ final readonly class AuthenticationMiddleware implements MiddlewareInterface
         }
 
         return $transportState->apply($request, $response);
+    }
+
+    /** @return list<object> */
+    private function payloads(
+        #[\SensitiveParameter]
+        ServerRequestInterface $request,
+    ): array {
+        if ($this->extractor instanceof ChainedPayloadExtractor) {
+            return $this->extractor->candidates($request);
+        }
+
+        $payload = $this->extractor->extract($request);
+
+        return $payload === null ? [] : [$payload];
     }
 }

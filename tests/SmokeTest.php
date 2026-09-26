@@ -52,7 +52,7 @@ final class SmokeTest extends TestCase
         self::assertSame($state,$seen->getAttribute($state::class));
     }
 }
-final readonly class SmokeIdentity implements IdentityInterface
+final class SmokeIdentity implements IdentityInterface
 {
     public UuidInterface $uuid { get => Uuid::fromString('018f6d5d-3f7a-7a9b-8c2f-123456789abc'); }
 }

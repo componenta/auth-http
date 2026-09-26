@@ -71,11 +71,19 @@ final readonly class AuthenticationMiddleware implements MiddlewareInterface
             $transportState,
         );
 
-        $result = $this->authenticator->attempt($payload, new Context([
-            ServerRequestInterface::class => $request,
-            ContextInterface::EXTRACTOR => $this->extractor,
-            CredentialTransportState::class => $transportState,
-        ]));
+        try {
+            $result = $this->authenticator->attempt($payload, new Context([
+                ServerRequestInterface::class => $request,
+                ContextInterface::EXTRACTOR => $this->extractor,
+                CredentialTransportState::class => $transportState,
+            ]));
+        } catch (\Throwable $exception) {
+            if ($ownsTransportState) {
+                $transportState->discardQueued();
+            }
+
+            throw $exception;
+        }
 
         if (
             $result->subject instanceof IdentityInterface

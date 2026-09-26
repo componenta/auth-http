@@ -39,6 +39,61 @@ final class SmokeTest extends TestCase
         );
     }
 
+    public function testMiddlewareDiscardsOwnedTransportStateWhenAuthenticatorThrows(): void
+    {
+        $counter = (object) ['discarded' => 0];
+        $extractor = new class implements PayloadExtractorInterface {
+            public function extract(
+                ServerRequestInterface $request,
+            ): ?object {
+                return new \stdClass();
+            }
+        };
+        $authenticator = new class($counter) implements AuthenticatorInterface {
+            public function __construct(private object $counter) {}
+
+            public function attempt(
+                object $payload,
+                ContextInterface $context,
+            ): AuthenticationResult {
+                $transportState = $context->getAttribute(
+                    CredentialTransportState::class,
+                );
+                \PHPUnit\Framework\Assert::assertInstanceOf(
+                    CredentialTransportState::class,
+                    $transportState,
+                );
+                $counter = $this->counter;
+                $transportState->onDiscard(
+                    static function () use ($counter): void {
+                        ++$counter->discarded;
+                    },
+                );
+
+                throw new \RuntimeException('authentication failed');
+            }
+        };
+        $handler = new class implements RequestHandlerInterface {
+            public function handle(
+                ServerRequestInterface $request,
+            ): ResponseInterface {
+                throw new \LogicException(
+                    'Downstream handler must not run.',
+                );
+            }
+        };
+
+        try {
+            (new AuthenticationMiddleware($extractor, $authenticator))
+                ->process(new ServerRequest('GET', '/'), $handler);
+            self::fail('Authenticator exception must propagate.');
+        } catch (\RuntimeException $exception) {
+            self::assertSame('authentication failed', $exception->getMessage());
+        }
+
+        self::assertSame(1, $counter->discarded);
+    }
+
     public function testMiddlewarePublishesTypedState(): void
     {
         $identity = new SmokeIdentity();

@@ -107,10 +107,6 @@ final readonly class AuthenticationMiddleware implements MiddlewareInterface
             $transportState->discardQueued();
         }
 
-        if (!$result instanceof AuthenticationResult) {
-            return $handler->handle($request);
-        }
-
         if (
             $result->subject instanceof IdentityInterface
             && $existingIdentity instanceof IdentityInterface

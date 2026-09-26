@@ -37,7 +37,7 @@ final class SmokeTest extends TestCase
             public function __construct(private IdentityInterface $identity,private object $state) {}
             public function attempt(object $payload,ContextInterface $context): AuthenticationResult
             {
-                self::assertInstanceOf(CredentialTransportState::class,$context->getAttribute(CredentialTransportState::class));
+                \PHPUnit\Framework\Assert::assertInstanceOf(CredentialTransportState::class,$context->getAttribute(CredentialTransportState::class));
                 return new AuthenticationResult($this->identity,state:$this->state,evidence:new AuthenticationEvidence(['session']));
             }
         };

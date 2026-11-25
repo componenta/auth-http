@@ -49,16 +49,21 @@ final class CredentialTransportState
             return CredentialResponseHeaders::apply($response);
         }
         if ($this->queued === []) return $response;
+        // Once publication starts, replacement concerns pending work, not
+        // the batch currently being committed and its compensation callbacks.
+        $queued = $this->queued;
+        $discardCallbacks = $this->discardCallbacks;
+        $this->queued = [];
+        $this->discardCallbacks = [];
         try {
-            foreach ($this->queued as $entry) {
+            foreach ($queued as $entry) {
                 $response = $entry['storage']->store($request, $response, $entry['payload']);
             }
         } catch (\Throwable $exception) {
+            $this->discardCallbacks = [...$discardCallbacks, ...$this->discardCallbacks];
             $this->discardQueued();
             throw $exception;
         }
-        $this->queued = [];
-        $this->discardCallbacks = [];
         return CredentialResponseHeaders::apply($response);
     }
 }

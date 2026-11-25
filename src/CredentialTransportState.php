@@ -14,6 +14,16 @@ final class CredentialTransportState
     private bool $clear = false;
     public bool $empty { get => !$this->clear && $this->queued === []; }
     public bool $cleared { get => $this->clear; }
+    /** @return array{storages:string, queued:string, discardCallbacks:string, cleared:bool} */
+    public function __debugInfo(): array
+    {
+        return [
+            'storages' => '[REDACTED]',
+            'queued' => '[REDACTED]',
+            'discardCallbacks' => '[REDACTED]',
+            'cleared' => $this->clear,
+        ];
+    }
     public function register(PayloadStorageInterface $storage): void { $this->storages[spl_object_id($storage)] = $storage; }
     public function queue(PayloadStorageInterface $storage, object $payload): void
     {

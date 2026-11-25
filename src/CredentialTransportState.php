@@ -69,11 +69,11 @@ final class CredentialTransportState
             foreach ($queued as $entry) {
                 $response = $entry['storage']->store($request, $response, $entry['payload']);
             }
+            return CredentialResponseHeaders::apply($response);
         } catch (\Throwable $exception) {
             $this->discardCallbacks = [...$discardCallbacks, ...$this->discardCallbacks];
             $this->discardQueued();
             throw $exception;
         }
-        return CredentialResponseHeaders::apply($response);
     }
 }

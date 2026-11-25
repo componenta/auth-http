@@ -29,6 +29,7 @@ final class CredentialTransportStateTest extends TestCase
         self::assertFalse($discarded, 'Publishing a queued credential must not compensate it as discarded.');
         self::assertSame('successor', $response->getHeaderLine('X-Credential'));
         self::assertSame('no-store', $response->getHeaderLine('Cache-Control'));
+        self::assertSame('no-cache', $response->getHeaderLine('Pragma'));
         self::assertTrue($state->empty);
     }
 
@@ -71,6 +72,38 @@ final class CredentialTransportStateTest extends TestCase
         }
         $state->discardQueued();
 
+        self::assertSame(['second', 'first'], $discarded);
+        self::assertTrue($state->empty);
+    }
+
+    public function testCacheHeaderFailureCompensatesTheStoredCredentialExactlyOnce(): void
+    {
+        $state = new CredentialTransportState();
+        $discarded = [];
+        $writtenHeaders = [];
+        $failure = new \RuntimeException('Cache header failed.');
+        $response = $this->createStub(ResponseInterface::class);
+        $response->method('withHeader')->willReturnCallback(
+            static function (string $name, mixed $value) use ($response, $failure, &$writtenHeaders): ResponseInterface {
+                if ($name === 'Cache-Control') throw $failure;
+                $writtenHeaders[$name] = $value;
+
+                return $response;
+            },
+        );
+        $state->queue(new HeaderStorageFixture(), new HeaderPayloadFixture('successor'));
+        $state->onDiscard(static function () use (&$discarded): void { $discarded[] = 'first'; });
+        $state->onDiscard(static function () use (&$discarded): void { $discarded[] = 'second'; });
+
+        try {
+            $state->apply(new ServerRequest('GET', '/'), $response);
+            self::fail('Cache header failure must propagate.');
+        } catch (\RuntimeException $exception) {
+            self::assertSame($failure, $exception);
+        }
+        $state->discardQueued();
+
+        self::assertSame(['X-Credential' => 'successor'], $writtenHeaders);
         self::assertSame(['second', 'first'], $discarded);
         self::assertTrue($state->empty);
     }

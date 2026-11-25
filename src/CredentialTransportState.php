@@ -56,8 +56,18 @@ final class CredentialTransportState
         #[\SensitiveParameter] ResponseInterface $response,
     ): ResponseInterface {
         if ($this->clear) {
-            foreach ($this->storages as $storage) $response = $storage->remove($request, $response);
-            return CredentialResponseHeaders::apply($response);
+            $removed = [];
+            do {
+                foreach ($this->storages as $id => $storage) {
+                    if (isset($removed[$id])) continue;
+                    $removed[$id] = true;
+                    $response = $storage->remove($request, $response);
+                }
+                $response = CredentialResponseHeaders::apply($response);
+                // Removal and header callbacks may register another transport.
+            } while (count($removed) !== count($this->storages));
+
+            return $response;
         }
         if ($this->queued === []) return $response;
         // Once publication starts, replacement concerns pending work, not

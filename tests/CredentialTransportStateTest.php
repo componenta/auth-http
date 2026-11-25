@@ -16,6 +16,57 @@ use Psr\Http\Message\ServerRequestInterface;
 
 final class CredentialTransportStateTest extends TestCase
 {
+    public function testClearFromRemovalIncludesTheNewlyRegisteredTransport(): void
+    {
+        $state = new CredentialTransportState();
+        $credentialStorage = new HeaderStorageFixture();
+        $initialStorage = $this->createMock(PayloadStorageInterface::class);
+        $initialStorage->expects(self::once())->method('remove')->willReturnCallback(
+            static function (ServerRequestInterface $request, ResponseInterface $response) use ($state, $credentialStorage): ResponseInterface {
+                $state->clear($credentialStorage);
+
+                return $response;
+            },
+        );
+        $state->clear($initialStorage);
+
+        $response = $state->apply(new ServerRequest('GET', '/'), new Response(200, ['X-Credential' => 'stale']));
+
+        self::assertSame('', $response->getHeaderLine('X-Credential'));
+        self::assertSame('no-store', $response->getHeaderLine('Cache-Control'));
+    }
+
+    public function testClearFromRemovalHeadersIncludesTheNewlyRegisteredTransport(): void
+    {
+        $state = new CredentialTransportState();
+        $credentialStorage = new HeaderStorageFixture();
+        $initialStorage = $this->createMock(PayloadStorageInterface::class);
+        $initialStorage->expects(self::once())->method('remove')->willReturnCallback(
+            static fn(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface => $response,
+        );
+        $state->clear($initialStorage);
+        $response = new class($state, $credentialStorage) extends Response {
+            public function __construct(
+                private readonly CredentialTransportState $state,
+                private readonly PayloadStorageInterface $storage,
+            ) {
+                parent::__construct(200, ['X-Credential' => 'stale']);
+            }
+
+            public function withHeader($name, $value): ResponseInterface
+            {
+                if ($name === 'Cache-Control') $this->state->clear($this->storage);
+
+                return parent::withHeader($name, $value);
+            }
+        };
+
+        $response = $state->apply(new ServerRequest('GET', '/'), $response);
+
+        self::assertSame('', $response->getHeaderLine('X-Credential'));
+        self::assertSame('no-store', $response->getHeaderLine('Cache-Control'));
+    }
+
     public function testClearDuringStorageCancelsThePublishingBatch(): void
     {
         $state = new CredentialTransportState();

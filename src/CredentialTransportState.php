@@ -46,6 +46,7 @@ final class CredentialTransportState
         }
         if ($failure !== null) throw $failure;
     }
+    /** Makes credential removal terminal for this request, including in-flight publication. */
     public function clear(#[\SensitiveParameter] PayloadStorageInterface $storage): void
     {
         $this->register($storage); $this->clear = true; $this->discardQueued();
@@ -68,12 +69,23 @@ final class CredentialTransportState
         try {
             foreach ($queued as $entry) {
                 $response = $entry['storage']->store($request, $response, $entry['payload']);
+                if ($this->cleared) break;
             }
-            return CredentialResponseHeaders::apply($response);
+            if (!$this->cleared) $response = CredentialResponseHeaders::apply($response);
         } catch (\Throwable $exception) {
             $this->discardCallbacks = [...$discardCallbacks, ...$this->discardCallbacks];
             $this->discardQueued();
             throw $exception;
         }
+        // A terminal clear may arrive through a storage or response callback.
+        // It cancels the active batch too, unlike replacement of pending work.
+        if ($this->cleared) {
+            $this->discardCallbacks = [...$discardCallbacks, ...$this->discardCallbacks];
+            $this->discardQueued();
+
+            return $this->apply($request, $response);
+        }
+
+        return $response;
     }
 }

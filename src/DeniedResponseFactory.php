@@ -28,7 +28,7 @@ final readonly class DeniedResponseFactory implements DeniedResponseFactoryInter
     {
         $code = self::validCode($reason->code) ? $reason->code : self::FALLBACK_CODE;
         $response = $this->responseFactory->createResponse($this->statusMap[$code] ?? $this->defaultStatus);
-        $response->getBody()->write(json_encode(['error' => $code], JSON_THROW_ON_ERROR));
+        JsonResponseBody::write($response, ['error' => $code]);
         $response = $response->withHeader('Content-Type','application/json')->withHeader('Cache-Control','no-store')->withHeader('Pragma','no-cache');
         return $reason instanceof RateLimited ? $response->withHeader('Retry-After',(string)$reason->retryAfter) : $response;
     }

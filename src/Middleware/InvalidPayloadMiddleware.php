@@ -2,6 +2,7 @@
 declare(strict_types=1);
 namespace Componenta\Auth\Http\Middleware;
 use Componenta\Auth\Http\Exception\InvalidPayloadException;
+use Componenta\Auth\Http\JsonResponseBody;
 use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -18,7 +19,7 @@ final readonly class InvalidPayloadMiddleware implements MiddlewareInterface
         try { return $handler->handle($request); }
         catch (InvalidPayloadException $e) {
             $response=$this->responseFactory->createResponse(400);
-            $response->getBody()->write(json_encode(['error'=>'invalid_payload','field'=>$e->field],JSON_THROW_ON_ERROR));
+            JsonResponseBody::write($response, ['error'=>'invalid_payload','field'=>$e->field]);
             return $response->withHeader('Content-Type','application/json')->withHeader('Cache-Control','no-store')->withHeader('Pragma','no-cache');
         }
     }

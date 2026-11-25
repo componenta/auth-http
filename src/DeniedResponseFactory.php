@@ -8,9 +8,9 @@ use Psr\Http\Message\ResponseInterface;
 final readonly class DeniedResponseFactory implements DeniedResponseFactoryInterface
 {
     private const string FALLBACK_CODE = 'authentication_denied';
-    /** @var array<string,int> */
+    /** @var array<array-key,int> */
     private array $statusMap;
-    /** @param array<string,int> $statusMap */
+    /** @param array<array-key,int> $statusMap */
     public function __construct(
         private ResponseFactoryInterface $responseFactory,
         array $statusMap = [],
@@ -19,7 +19,7 @@ final readonly class DeniedResponseFactory implements DeniedResponseFactoryInter
         if ($defaultStatus < 400 || $defaultStatus > 599) throw new \InvalidArgumentException('The default denial status must be an HTTP error status.');
         $validatedMap = [];
         foreach ($statusMap as $code => $status) {
-            if (!self::validCode($code) || $status < 400 || $status > 599) throw new \InvalidArgumentException('Invalid denial status mapping.');
+            if (!self::validCode((string) $code) || $status < 400 || $status > 599) throw new \InvalidArgumentException('Invalid denial status mapping.');
             $validatedMap[$code] = $status;
         }
         $this->statusMap = $validatedMap;

@@ -21,7 +21,9 @@ cancels an in-flight batch if a storage or response callback requests logout.
 The response then removes all registered credentials, and subsequent queueing
 cannot restore them for that request.
 
-Compensation callbacks run once in reverse registration order. All callbacks are
-attempted even when one fails; the first cleanup failure propagates, including
-when it supersedes a publication failure. Successful publication releases the
-batch's compensation callbacks without invoking them.
+Compensation callbacks run once in reverse registration order. All callbacks in
+each compensation pass are attempted even when one fails; that pass's first
+cleanup failure propagates, including when it supersedes a publication failure.
+A later pass for the active batch can supersede a failure from a nested clear of
+pending work. Successful publication releases the batch's compensation callbacks
+without invoking them.

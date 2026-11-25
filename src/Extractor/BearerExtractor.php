@@ -11,7 +11,7 @@ final readonly class BearerExtractor implements PayloadExtractorInterface
     {
         if (preg_match('/\A[!#$%&\'\*+.^_\x60|~0-9A-Za-z-]+\z/D',$header) !== 1) throw new \InvalidArgumentException('Bearer header name is invalid.');
     }
-    public function extract(ServerRequestInterface $request): ?object
+    public function extract(#[\SensitiveParameter] ServerRequestInterface $request): ?object
     {
         $value=$request->getHeaderLine($this->header);
         if ($value === '' || strncasecmp($value,'Bearer',6)!==0) return null;

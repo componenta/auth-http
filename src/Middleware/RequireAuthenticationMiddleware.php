@@ -12,7 +12,10 @@ use Psr\Http\Server\RequestHandlerInterface;
 final readonly class RequireAuthenticationMiddleware implements MiddlewareInterface
 {
     public function __construct(private DeniedResponseFactoryInterface $deniedResponseFactory) {}
-    public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
+    public function process(
+        #[\SensitiveParameter] ServerRequestInterface $request,
+        #[\SensitiveParameter] RequestHandlerInterface $handler,
+    ): ResponseInterface
     {
         if ($request->getAttribute(IdentityInterface::class) instanceof IdentityInterface) return $handler->handle($request);
         $reason=$request->getAttribute(DeniedReasonInterface::class);

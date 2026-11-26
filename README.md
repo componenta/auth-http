@@ -14,6 +14,13 @@ shares it with downstream components and the middleware that created it applies
 the final decision to the response. Discard callbacks compensate credentials
 that were issued but not successfully published.
 
+When a credential candidate fails softly, authentication middleware cancels only
+the pending work registered during that attempt. Nested authentication therefore
+preserves an accepted outer credential while trying another candidate for the
+same identity. Terminal denial, exhausted candidates and mismatched identities
+still cancel all pending work. An explicit `discardQueued()` or `clear()` inside
+an attempt also retains its global effect; fallback never restores cancelled work.
+
 `discardQueued()` cancels pending work. During publication,
 `ReplacingPayloadStorage` may discard newer pending work without cancelling the
 batch already being published. `clear()` is a terminal removal decision: it also

@@ -7,10 +7,11 @@ final class CredentialTransportState
 {
     /** @var array<int, PayloadStorageInterface> */
     private array $storages = [];
-    /** @var list<array{storage: PayloadStorageInterface, payload: object}> */
+    /** @var array<int, array{storage: PayloadStorageInterface, payload: object}> */
     private array $queued = [];
-    /** @var list<\Closure(): void> */
+    /** @var array<int, \Closure(): void> */
     private array $discardCallbacks = [];
+    private int $lastRegistrationId = 0;
     private bool $clear = false;
     public bool $empty { get => !$this->clear && $this->queued === []; }
     public bool $cleared { get => $this->clear; }
@@ -28,20 +29,49 @@ final class CredentialTransportState
     public function queue(PayloadStorageInterface $storage, object $payload): void
     {
         $this->register($storage);
-        if (!$this->clear) $this->queued[] = ['storage' => $storage, 'payload' => $payload];
+        if (!$this->clear) $this->queued[++$this->lastRegistrationId] = ['storage' => $storage, 'payload' => $payload];
     }
     public function onDiscard(#[\SensitiveParameter] \Closure $callback): void
     {
         if ($this->clear) { $callback(); return; }
-        $this->discardCallbacks[] = $callback;
+        $this->discardCallbacks[++$this->lastRegistrationId] = $callback;
+    }
+    /**
+     * Captures a one-shot rollback of later registrations still pending here.
+     * Explicit global cancellation and in-flight publication remain authoritative.
+     *
+     * @internal Used to isolate a soft-failed authentication candidate.
+     * @return \Closure(): void
+     */
+    public function checkpoint(): \Closure
+    {
+        $watermark = $this->lastRegistrationId;
+        $used = false;
+
+        return function () use ($watermark, &$used): void {
+            if ($used) return;
+            $used = true;
+            $this->discardAfter($watermark);
+        };
     }
     public function discardQueued(): void
     {
-        $this->queued = [];
-        $callbacks = array_reverse($this->discardCallbacks);
-        $this->discardCallbacks = [];
+        $this->discardAfter(0);
+    }
+    private function discardAfter(int $watermark): void
+    {
+        foreach ($this->queued as $id => $entry) {
+            if ($id > $watermark) unset($this->queued[$id]);
+        }
+        $callbacks = [];
+        foreach ($this->discardCallbacks as $id => $callback) {
+            if ($id <= $watermark) continue;
+            $callbacks[] = $callback;
+            unset($this->discardCallbacks[$id]);
+        }
+        // Detach all selected work before callbacks can queue or cancel more work.
         $failure = null;
-        foreach ($callbacks as $callback) {
+        foreach (array_reverse($callbacks) as $callback) {
             try { $callback(); } catch (\Throwable $exception) { $failure ??= $exception; }
         }
         if ($failure !== null) throw $failure;
@@ -83,14 +113,14 @@ final class CredentialTransportState
             }
             if (!$this->cleared) $response = CredentialResponseHeaders::apply($response);
         } catch (\Throwable $exception) {
-            $this->discardCallbacks = [...$discardCallbacks, ...$this->discardCallbacks];
+            $this->discardCallbacks = $discardCallbacks + $this->discardCallbacks;
             $this->discardQueued();
             throw $exception;
         }
         // A terminal clear may arrive through a storage or response callback.
         // It cancels the active batch too, unlike replacement of pending work.
         if ($this->cleared) {
-            $this->discardCallbacks = [...$discardCallbacks, ...$this->discardCallbacks];
+            $this->discardCallbacks = $discardCallbacks + $this->discardCallbacks;
             $this->discardQueued();
 
             return $this->apply($request, $response);

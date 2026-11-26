@@ -76,6 +76,7 @@ final readonly class AuthenticationMiddleware implements MiddlewareInterface
 
         try {
             foreach ($payloads as $payload) {
+                $rollbackCandidate = $transportState->checkpoint();
                 $candidate = $this->authenticator->attempt(
                     $payload,
                     new Context([
@@ -94,9 +95,9 @@ final readonly class AuthenticationMiddleware implements MiddlewareInterface
                     break;
                 }
 
-                // A soft-failed credential candidate must not leave tentative
-                // publication/compensation state behind before trying the next.
-                $transportState->discardQueued();
+                // Cancel this candidate's tentative work without revoking an
+                // accepted outer credential during nested authentication.
+                $rollbackCandidate();
             }
 
             if (

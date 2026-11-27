@@ -1,6 +1,8 @@
 # Componenta Auth HTTP
 
-PSR-7/PSR-15 integration for Componenta Auth 3.
+PSR-7/PSR-15 integration for Componenta Auth 4.
+
+Version 2 requires `componenta/auth ^4.0.0` and `componenta/identity ^1.1.1`.
 
 Owns HTTP payload extraction/storage, request-scoped credential publication,
 generic authentication middleware and denial responses. Concrete authentication
